@@ -129,6 +129,10 @@ add_executable(${TARGET_NAME}
         oled/oledConst.h
         BSP/clocktick.c
         BSP/clocktick.h
+        bootLoader/bootCfg.c
+        bootLoader/bootCfg.h
+        EC11/EC11.c
+        EC11/EC11.h
 )
 # =========================================================================
 # 6. Include directories

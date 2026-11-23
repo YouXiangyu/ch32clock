@@ -1,7 +1,6 @@
 /* 双缓冲 OLED：绘图、交换、提交 DMA 在主循环；中断只公布传输结果。 */
 #include "oled.h"
 #include "oledConst.h"
-#include "I2C.h"
 #include <stddef.h>
 #include <string.h>
 
@@ -24,44 +23,24 @@ enum {
     OLED_INIT_ERROR,
 };
 
-static oledBuffer oledFrames[2];
-OLED g_oled = {
-    .address = 0x3CU,
-    .frontBuffer = &oledFrames[0],
-    .backBuffer = &oledFrames[1],
-};
-
-/* BSP 只有一条 I2C1 DMA 通道；同一时刻只绑定一个 OLED 实例。 */
+/* 初始化和命令流共用静态缓冲，同一时刻只绑定一个 OLED 实例。 */
 static OLED *activeOled;
 static uint8_t initStream[sizeof(oledInitBitstream)];
 static uint8_t windowStream[] = {0x00U, 0x21U, 0U, 127U, 0x22U, 0U, 7U};
 
-static OLED_STATUS oled_result(I2C_HW_RESULT result)
-{
-    switch (result) {
-        case I2C_OK: return OLED_OK;
-        case I2C_NACK: return OLED_NACK;
-        case I2C_BUSY: return OLED_BUSY;
-        case I2C_TIMEOUT: return OLED_TIMEOUT;
-        case I2C_INVALID_ARGUMENT: return OLED_INVALID_ARGUMENT;
-        case I2C_DMA_ERROR: return OLED_DMA_ERROR;
-        default: return OLED_BUS_ERROR;
-    }
-}
-
 /* DMA/I2C IRQ 中只改状态；下一段命令和缓冲交换都留给 Service。 */
-static void oled_i2c_done(I2C_HW_RESULT result)
+static void oled_i2c_done(OLED *self, OLED_STATUS result)
 {
-    if (activeOled != NULL) activeOled->status = (uint8_t)oled_result(result);
+    self->status = (uint8_t)result;
 }
 
 /* STOP 尚未结束时底层返回 BUSY，下一次 Service 再提交。 */
 static OLED_STATUS oled_start_dma(OLED *self, uint8_t *data, uint16_t len)
 {
     self->status = OLED_BUSY;
-    I2C_HW_RESULT result = BSP_I2C_DMA_Transmit(data, (uint8_t)(self->address << 1), len);
-    if (result != I2C_OK) self->status = (uint8_t)oled_result(result);
-    return oled_result(result);
+    OLED_STATUS result = self->transmit(self, data, len);
+    if (result != OLED_OK) self->status = (uint8_t)result;
+    return result;
 }
 
 /* 上一帧 DMA 已停止；交换后按 32 位字复制新前台，供后续局部绘图。 */
@@ -83,14 +62,14 @@ static void oled_exchange(OLED *self)
 OLED_STATUS oled_Init(OLED *self)
 {
     if (self == NULL || self->address > 0x7FU || self->frontBuffer == NULL ||
-        self->backBuffer == NULL || self->frontBuffer == self->backBuffer) {
+        self->backBuffer == NULL || self->frontBuffer == self->backBuffer ||
+        self->transmit == NULL) {
         return OLED_INVALID_ARGUMENT;
     }
     if (activeOled != NULL && activeOled != self) return OLED_BUSY;
-    if (BSP_I2C_DMA_Busy != 0U) return OLED_BUSY;
 
     activeOled = self;
-    BSP_I2C_DMA_OnComplete = oled_i2c_done;
+    self->transmitCallBack = oled_i2c_done;
     memcpy(initStream, oledInitBitstream, sizeof(initStream));
     self->frontBuffer->commandByte = 0x40U;
     self->backBuffer->commandByte = 0x40U;

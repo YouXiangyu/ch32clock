@@ -14,10 +14,9 @@ void BSP_GPIO_Init()
     /* HCLK 144 MHz；APB1 /4 = 36 MHz。保留 CFGR0 其他位。 */
     RCC->CFGR0 = (RCC->CFGR0 & 0xFFFFF8FFu) | 0x00000500u;
 
-    /* GPIOA、GPIOB；TIM2、TIM3、I2C1；DMA1。 */
+    /* 先只开 GPIOA/B 和 TIM2/3；I2C1、DMA1 留给各自的初始化函数。 */
     RCC->APB2PCENR |= 0x0000000Cu;
-    RCC->APB1PCENR |= 0x00200003u;
-    RCC->AHBPCENR  |= 0x00000001u;
+    RCC->APB1PCENR |= 0x00000003u;
 
     /* 先预置电平：PA5~7 上拉；PB6/7 高，PB0/1 低。 */
     GPIOA->BSHR = 0x000000E0u;

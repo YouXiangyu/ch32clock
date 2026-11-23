@@ -38,11 +38,16 @@ typedef struct OLED {
     uint8_t phase;               /* 驱动内部状态，仅 Service 改写。 */
     oledBuffer *frontBuffer;     /* DMA 正在发送或待发送的完整画面；绘图端不得写。 */
     oledBuffer *backBuffer;      /* 绘图端写入的画面；只在主循环中访问。 */
+    /* 平台层负责提交整个数据流；OLED_OK 只表示 DMA 已启动。 */
+    OLED_STATUS (*transmit)(struct OLED *self, uint8_t *data, uint16_t length);
+    /* 平台层在 DMA/I2C 完成后调用；驱动只在这里记录最终状态。 */
+    void (*transmitCallBack)(struct OLED *self, OLED_STATUS result);
+
 } OLED;
 
 extern OLED g_oled;
 
-/* 注册 I2C DMA 完成回调并安排初始化命令；此后须反复调用 OLED_Service。 */
+/* 设置完成回调并安排初始化命令；此后须反复调用 OLED_Service。 */
 OLED_STATUS oled_Init(OLED *self);
 
 /* 以下绘图函数只写 backBuffer，不立即启动 DMA。 */

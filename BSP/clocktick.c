@@ -16,10 +16,13 @@ volatile uint32_t clockTick5ms;
 void clockTick5ms_Init(void)
 {
     SysTick->CTLR = 0u;         /* 停止计数，关闭计数器中断。 */
+    PFIC->IPRIOR[SysTick_IRQn] = 0x40u;
+    PFIC->IPRR[0] = 1u << SysTick_IRQn; /* 清 SysTick pending。 */
     SYSTICK_CMPLR = 89999u;
     SysTick->CTLR = 0x20u;      /* INIT：把向上计数器置 0。 */
     SysTick->SR = 0u;           /* CNTIF 写 0 清除。 */
     clockTick5ms = 0u;
+    PFIC->IENR[0] = 1u << SysTick_IRQn; /* 先放行 IRQ，再启动计数。 */
     SysTick->CTLR = 0x0Bu;      /* HCLK/8、向上计数、自动重装、中断和计数使能。 */
 }
 

@@ -1,9 +1,26 @@
 #include "IRQ.h"
 #include "ch32v20x.h"
+#include "clocktick.h"
+#include "EC11/EC11.h"
 
-volatile uint32_t BSP_GPIO_IrqFlags;
+/* A 相先于 B 相闭合为正向：11→01→00→10→11。 */
+static const int8_t ec11QuadratureDelta[16] = {
+     0, -1,  1,  0,
+     1,  0,  0, -1,
+    -1,  0,  0,  1,
+     0,  1, -1,  0,
+};
+static uint8_t ec11PreviousAB;
+static int8_t ec11QuarterSteps = 0;
 
-/* 配置 SysTick、DMA1_CH6、I2C1 事件/错误和旋钮 EXTI5~7 的中断优先级与使能。
+enum {
+    EC11_NO_EVENT,
+    EC11_FORWARD,
+    EC11_REVERSE,
+    EC11_PRESS,
+};
+
+/* 配置 DMA1_CH6、I2C1 事件/错误和旋钮 EXTI5~7 的中断优先级与使能。
  * 调用前先完成 GPIO 和 I2C/DMA 初始化，避免在硬件未就绪时放行中断。 */
 void BSP_IRQ_Init(void)
 {
@@ -17,6 +34,9 @@ void BSP_IRQ_Init(void)
     EXTI->FTENR |= 0x000000E0u;
     EXTI->INTFR = 0x000000E0u;
 
+    /* 在放行 EXTI 前采样 A/B 初态；首次完整相位变化才产生转动事件。 */
+    ec11PreviousAB = (uint8_t)((GPIOA->INDR >> 6U) & 0x03u);
+
     PFIC->IPRIOR[32] = 0x40u; /* DMA1 Channel6。 */
     PFIC->IPRIOR[39] = 0x20u; /* EXTI9_5。 */
     PFIC->IPRIOR[47] = 0x40u; /* I2C1 事件：SB、ADDR、BTF。 */
@@ -24,22 +44,51 @@ void BSP_IRQ_Init(void)
     PFIC->IPRR[1] = 0x00018081u; /* 清四路 pending。 */
     PFIC->IENR[1] = 0x00018081u; /* 使能四路 IRQ。 */
 
-    PFIC->IPRIOR[SysTick_IRQn] = 0x40u; /* 5 ms 时基。 */
-    PFIC->IPRR[0] = 1u << SysTick_IRQn; /* 清 SysTick pending。 */
-    PFIC->IENR[0] = 1u << SysTick_IRQn; /* 使能 SysTick IRQ。 */
-
     EXTI->INTENR |= 0x000000E0u;
 }
 
-/* 清 PA5~7 的 EXTI pending，并将发生过的边沿记入 BSP_GPIO_IrqFlags。
- * 标志是位集合，不记录边沿顺序；旋钮解码还需读取引脚状态。 */
+/* PA5 按下或 PA6/PA7 完成一格转动时，在当前 5 ms 节拍内最多计一次事件。 */
 void EXTI9_5_IRQHandler(void)
     __attribute__((interrupt("WCH-Interrupt-fast")));
 
 void EXTI9_5_IRQHandler(void)
 {
-    /* INTFR 写 1 清除；标志只提示发生过边沿，不保留旋钮边沿顺序。 */
+    /* INTFR 写 1 清除；读取当前引脚电平解码本次边沿。 */
     uint32_t pending = EXTI->INTFR & 0x000000E0u;
     EXTI->INTFR = pending;
-    BSP_GPIO_IrqFlags |= pending;
+    uint32_t pins = GPIOA->INDR;
+    uint8_t event = EC11_NO_EVENT;
+
+    if ((pending & 0x000000C0u) != 0U) {
+        uint8_t ab = (uint8_t)((pins >> 6U) & 0x03u); /* bit1=A(PA7)，bit0=B(PA6)。 */
+        if ((ec11PreviousAB ^ ab) == 3U) {
+            ec11QuarterSteps = 0; /* 两相同时跳变，丢弃不完整的一格。 */
+        } else {
+            ec11QuarterSteps += ec11QuadratureDelta[(ec11PreviousAB << 2U) | ab];
+        }
+        ec11PreviousAB = ab;
+
+        /* 00/11 为定位点；两次有效相位变化记一格。 */
+        if (ab == 0U || ab == 3U) {
+            if (ec11QuarterSteps >= 2) event = EC11_FORWARD;
+            else if (ec11QuarterSteps <= -2) event = EC11_REVERSE;
+            ec11QuarterSteps = 0;
+        }
+    }
+
+    /* PA5 只开下降沿；与旋转同时到来时优先记录按下。 */
+    if ((pending & 0x00000020u) != 0U && (pins & 0x00000020u) == 0U) {
+        event = EC11_PRESS;
+    }
+    if (event == EC11_NO_EVENT) return;
+
+    uint32_t tick = clockTick5ms;
+    if (g_ec11.hasLastEventTick != 0U && g_ec11.lastEventTick5ms == tick) return;
+    g_ec11.lastEventTick5ms = tick;
+    g_ec11.hasLastEventTick = 1U;
+
+    /* 饱和计数，主循环来不及取走时不回绕到 0。 */
+    if (event == EC11_FORWARD && g_ec11.forwardCount != UINT8_MAX) ++g_ec11.forwardCount;
+    else if (event == EC11_REVERSE && g_ec11.reverseCount != UINT8_MAX) ++g_ec11.reverseCount;
+    else if (event == EC11_PRESS && g_ec11.pressCount != UINT8_MAX) ++g_ec11.pressCount;
 }

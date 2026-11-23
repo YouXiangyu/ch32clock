@@ -18,10 +18,13 @@ volatile I2C_HW_RESULT BSP_I2C_DMA_Result = I2C_OK;
 void (*BSP_I2C_DMA_OnComplete)(I2C_HW_RESULT result);
 
 /* 初始化 I2C1 的 400 kHz 时序和 DMA1 Channel6 的固定配置。
- * 前置条件：BSP_GPIO_Init 已设置 APB1=36 MHz、打开外设时钟并配置 PB6/PB7。
+ * 前置条件：BSP_GPIO_Init 已设置 APB1=36 MHz 并配置 PB6/PB7。
  * 这里只准备硬件；每包的地址、源指针和长度由发送函数设置。 */
 void BSP_DMA_I2C_Init(void)
 {
+    RCC->APB1PCENR |= 0x00200000u; /* I2C1 时钟。 */
+    RCC->AHBPCENR  |= 0x00000001u; /* DMA1 时钟。 */
+
     /* BSP_GPIO_Init 已将 PCLK1 设为 36 MHz；快速模式 400 kHz，duty=2。
      * CCR=36 MHz/(3*400 kHz)=30；RTR=11。 */
     I2C1->CTLR1 = 0x0000u;
