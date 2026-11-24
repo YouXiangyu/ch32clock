@@ -105,7 +105,6 @@ set(COMMON_LINK_FLAGS
 # =========================================================================
 # 5. Source files
 # =========================================================================
-# 5. Source files
 add_executable(${TARGET_NAME}
         main.c
         Startup/startup_ch32v20x_D6.S
@@ -122,45 +121,34 @@ add_executable(${TARGET_NAME}
         BSP/I2C.h
         BSP/IRQ.c
         BSP/IRQ.h
-        oled/oled.c
-        oled/oled.h
-        oled/oled_ch32.c
-        oled/oled_ch32.h
-        oled/oledConst.h
+        Component/oled/oled.c
+        Component/oled/oled.h
+        Component/oled/oled_ch32.c
+        Component/oled/oled_ch32.h
+        Component/oled/oledConst.h
         BSP/clocktick.c
         BSP/clocktick.h
         bootLoader/bootCfg.c
         bootLoader/bootCfg.h
-        EC11/EC11.c
-        EC11/EC11.h
+        Component/EC11/EC11.c
+        Component/EC11/EC11.h
+        Component/buzzer/buzzer.c
+        Component/buzzer/buzzer.h
+        BSP/TIM.c
+        BSP/TIM.h
 )
 # =========================================================================
 # 6. Include directories
 # =========================================================================
 target_include_directories(${TARGET_NAME} PRIVATE
+        # 工程内跨模块头文件用带目录的路径，如 Component/oled/oled.h。
         "${CMAKE_CURRENT_SOURCE_DIR}"
-        "${CMAKE_CURRENT_SOURCE_DIR}/Peripheral/inc"
-        "${CMAKE_CURRENT_SOURCE_DIR}/Debug"
-        "${CMAKE_CURRENT_SOURCE_DIR}/Core"
-        "${CMAKE_CURRENT_SOURCE_DIR}/User"
-)
-
-target_include_directories(${TARGET_NAME} PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}"
+        # BSP 内部以及 OLED 的 CH32 适配层使用 I2C.h 等本地接口。
         "${CMAKE_CURRENT_SOURCE_DIR}/BSP"
-        "${CMAKE_CURRENT_SOURCE_DIR}/Core"
+        # WCH 设备头文件及系统时钟头文件沿用 SDK 的短文件名。
         "${CMAKE_CURRENT_SOURCE_DIR}/Peripheral/inc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Core"
         "${CMAKE_CURRENT_SOURCE_DIR}/User"
-)
-
-target_compile_definitions(${TARGET_NAME} PRIVATE
-        CH32V20x_D6
-)
-
-list(REMOVE_DUPLICATES PROJECT_HEADER_DIRS)
-
-target_include_directories(${TARGET_NAME} PRIVATE
-        ${PROJECT_HEADER_DIRS}
 )
 
 target_compile_definitions(${TARGET_NAME} PRIVATE

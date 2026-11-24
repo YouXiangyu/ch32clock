@@ -1,7 +1,7 @@
 #include "IRQ.h"
 #include "ch32v20x.h"
 #include "clocktick.h"
-#include "EC11/EC11.h"
+#include "Component/EC11/EC11.h"
 
 /* A 相先于 B 相闭合为正向：11→01→00→10→11。 */
 static const int8_t ec11QuadratureDelta[16] = {

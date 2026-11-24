@@ -25,9 +25,9 @@ void BSP_GPIO_Init()
     /* PA5~7：上拉输入；PA0~4：浮空输入。 */
     GPIOA->CFGLR = 0x88844444u;
 
-    /* PB7/6：复用开漏；PB1：复用推挽；PB0：推挽输出。
+    /* PB7/6：复用开漏；PB1：推挽输出低电平，待 TIM_Init 接管；PB0：推挽输出。
        PB2~5：浮空输入。 */
-    GPIOB->CFGLR = 0xDD4444A2u;
+    GPIOB->CFGLR = 0xDD444422u;
 
 }
 
