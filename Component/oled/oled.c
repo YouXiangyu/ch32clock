@@ -26,7 +26,13 @@ enum {
 /* 初始化和命令流共用静态缓冲，同一时刻只绑定一个 OLED 实例。 */
 static OLED *activeOled;
 static uint8_t initStream[sizeof(oledInitBitstream)];
-static uint8_t windowStream[] = {0x00U, 0x21U, 0U, 127U, 0x22U, 0U, 7U};
+static uint8_t contrast = 0xcf;
+void oled_setContrast(uint8_t value)
+{
+    contrast = value;
+}
+
+static uint8_t windowStream[] = {0x00U, 0x81U, 0xcfU, 0x21U, 0U, 127U, 0x22U, 0U, 7U};
 
 /* DMA/I2C IRQ 中只改状态；下一段命令和缓冲交换都留给 Service。 */
 static void oled_i2c_done(OLED *self, OLED_STATUS result)
@@ -159,6 +165,7 @@ void OLED_Service(OLED *self)
             self->phase = OLED_WINDOW_SEND;
             break;
         case OLED_WINDOW_SEND:
+            windowStream[2] = contrast; /* DMA has released the previous command. */
             result = oled_start_dma(self, windowStream, sizeof(windowStream));
             if (result == OLED_OK) self->phase = OLED_WINDOW_WAIT;
             else if (result != OLED_BUSY) self->phase = OLED_IDLE;

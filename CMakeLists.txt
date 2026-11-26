@@ -107,6 +107,8 @@ set(COMMON_LINK_FLAGS
 # =========================================================================
 add_executable(${TARGET_NAME}
         main.c
+        App/pomodoro.c
+        App/display.c
         Startup/startup_ch32v20x_D6.S
         User/system_ch32v20x.c
         BSP/GPIO.c
@@ -128,8 +130,6 @@ add_executable(${TARGET_NAME}
         Component/oled/oledConst.h
         BSP/clocktick.c
         BSP/clocktick.h
-        bootLoader/bootCfg.c
-        bootLoader/bootCfg.h
         Component/EC11/EC11.c
         Component/EC11/EC11.h
         Component/buzzer/buzzer.c

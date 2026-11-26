@@ -1,54 +1,71 @@
-#include <stdint.h>
+#include "App/display.h"
+#include "Component/oled/oled.h"
+#include "Component/EC11/EC11.h"
 #include "systemInit.h"
 #include "clocktick.h"
-#include "Component/oled/oled.h"
-#include "bootLoader/bootCfg.h"
+#include "TIM.h"
+#include "ch32v20x.h"
 
-/* 固定宽度，数字变长或毫秒计数回绕时不会留下上一帧的字符。 */
-static void format_milliseconds(char text[15], uint32_t milliseconds)
+static int takeRotation(void)
 {
-    text[0] = 'm';
-    text[1] = 's';
-    text[2] = ':';
-    text[3] = ' ';
-    text[14] = '\0';
-
-    for (uint8_t i = 14U; i > 4U;) {
-        --i;
-        text[i] = (char)('0' + milliseconds % 10U);
-        milliseconds /= 10U;
-    }
+    NVIC_DisableIRQ(EXTI9_5_IRQn);
+    int steps = (int)g_ec11.forwardCount - g_ec11.reverseCount;
+    g_ec11.forwardCount = g_ec11.reverseCount = g_ec11.pressCount = 0;
+    NVIC_EnableIRQ(EXTI9_5_IRQn);
+    return steps;
 }
 
 int main(void)
 {
     BSP_SystemInit();
-    if (oled_Init(&g_oled) != OLED_OK) {
-        for (;;) { }
-    }
+    if (oled_Init(&g_oled) != OLED_OK) for (;;) { }
 
-    if (goBootloader != 0u) {
-        enterBootloader();
-        oled_clearBuffer(&g_oled); /* EC11 取消后，清掉启动模式文字再绘制正常页面。 */
-    }
-
-    char timeText[15];
-    uint32_t lastTick = clockTick5ms;
-    format_milliseconds(timeText, lastTick * 5U);
-    oled_setString(&g_oled, 0U, "Hello World", 11U);
-    oled_setString(&g_oled, 2U, timeText, 14U);
-    oled_Flush(&g_oled);
+    Pomodoro app = {.prefs = defaultPreferences};
+    takeRotation();
+    bool down = !(GPIOA->INDR & (1u << 5));
+    Button button = {.raw = down, .stable = down, .consumed = down};
+    bool notice = false, ringing = false;
+    uint32_t last = clockTick5ms, alertAt = last;
+    static const uint8_t contrast[] = {0, 16, 48, 96, 160, 255};
+    oled_setContrast(contrast[app.prefs.value[BRIGHTNESS]]);
+    drawPomodoro(&app, false);
 
     for (;;) {
         OLED_Service(&g_oled);
+        uint32_t now = clockTick5ms;
+        uint32_t elapsed = now - last;
+        if (!elapsed) continue;
+        last = now;
+        uint32_t oldSeconds = (app.remaining + 199) / 200;
+        bool expired = advanceTimer(&app, elapsed);
+        if (expired) {
+            alertAt = now;
+            notice = true;
+            if (!app.prefs.value[MUTE]) {
+                TIM_SetVolume(app.prefs.value[VOLUME]);
+                ringing = true;
+            }
+        }
+        if (ringing && now - alertAt >= 120) {
+            TIM_DisableOutput();
+            ringing = false;
+        }
+        bool clearNotice = notice && now - alertAt >= 400;
+        if (clearNotice) notice = false;
 
-        /* 5 ms 更新一次后台数字；DMA 按总线速度发送最新的完整帧。 */
-        uint32_t tick = clockTick5ms;
-        if (tick != lastTick) {
-            lastTick = tick;
-            format_milliseconds(timeText, tick * 5U);
-            oled_setString(&g_oled, 2U, timeText, 14U);
-            oled_Flush(&g_oled);
+        int steps = takeRotation();
+        Gesture gesture = sampleButton(&button, !(GPIOA->INDR & (1u << 5)), now);
+        if (steps) turn(&app, steps);
+        if (gesture != NO_CLICK) {
+            notice = false;
+            press(&app, gesture);
+        }
+        if (steps || gesture || expired || clearNotice ||
+            (app.remaining + 199) / 200 != oldSeconds) {
+            unsigned level = app.page == EDIT_SETTING && app.setting == BRIGHTNESS ?
+                             app.draft : app.prefs.value[BRIGHTNESS];
+            oled_setContrast(contrast[level]);
+            drawPomodoro(&app, notice);
         }
     }
 }

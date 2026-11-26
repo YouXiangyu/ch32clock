@@ -58,6 +58,12 @@ void TIM_EnableOutput(void)
     TIM3->CH4CVR = tim_half_period();
 }
 
+void TIM_SetVolume(uint8_t level)
+{
+    if (level > 5) level = 5;
+    TIM3->CH4CVR = ((uint32_t)TIM3->ATRLR + 1u) * level / 10u;
+}
+
 void TIM_DisableOutput(void)
 {
     /* 保持 CH4 和计数器运行，CCR4=0 才能保证 PB1 被持续驱动为低。 */

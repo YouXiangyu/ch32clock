@@ -60,6 +60,8 @@ OLED_STATUS oled_setPages(OLED *self, uint8_t firstPage, const uint8_t *data, ui
 OLED_STATUS oled_Flush(OLED *self);
 /* 主循环周期调用；每次最多推进一个 DMA 阶段，不等待 I2C 总线。 */
 void OLED_Service(OLED *self);
+/* Applied on the next flushed frame. */
+void oled_setContrast(uint8_t value);
 
 /* 绘图与 Service 必须在同一执行上下文，批量绘图完成后再调用 oled_Flush。
  * 不要跨 Service 缓存 backBuffer 指针；DMA 完成回调只发布结果，不交换缓冲。 */

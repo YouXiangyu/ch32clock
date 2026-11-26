@@ -45,6 +45,8 @@ void TIM_Init(void);
 void TIM_SetAutoReload(uint32_t ar);
 /* 输出约 50% 占空比的方波。 */
 void TIM_EnableOutput(void);
+/* 1..5 maps to a 10..50 percent PWM duty cycle. */
+void TIM_SetVolume(uint8_t level);
 /* 将 PWM 比较值清零，让 PB1 持续输出低电平。 */
 void TIM_DisableOutput(void);
 
